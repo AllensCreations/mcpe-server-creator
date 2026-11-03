@@ -21,14 +21,14 @@ if ! gh auth status &> /dev/null; then
     exit 1
 fi
 
-# Prompt for inputs
-read -p "Enter your new Server Repository Name (e.g., my-bedrock-server): " REPO_NAME
+# Read prompts explicitly from /dev/tty so curl piping works
+read -p "Enter your new Server Repository Name (e.g., my-bedrock-server): " REPO_NAME < /dev/tty
 if [ -z "$REPO_NAME" ]; then
     echo "❌ Repository name cannot be empty."
     exit 1
 fi
 
-read -p "Make this repository Private? (y/n, default: y): " IS_PRIVATE
+read -p "Make this repository Private? (y/n, default: y): " IS_PRIVATE < /dev/tty
 IS_PRIVATE=${IS_PRIVATE:-y}
 
 if [[ "$IS_PRIVATE" =~ ^[Yy]$ ]]; then
