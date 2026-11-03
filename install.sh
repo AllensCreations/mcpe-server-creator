@@ -20,10 +20,8 @@ fi
 # 2. Get Visibility Choice
 if (whiptail --title "Repository Privacy" --yesno "Do you want this server repository to be PRIVATE? (Recommended for safety)" 10 60); then
     VISIBILITY="--private"
-    VIS_TEXT="Private"
 else
     VISIBILITY="--public"
-    VIS_TEXT="Public"
 fi
 
 # 3. Oracle Setup Choice
@@ -101,24 +99,40 @@ Welcome to your automated Minecraft Bedrock Dedicated Server repository!
 
 ---
 
-## 📖 How to Connect & Manage Your Server
+## 📖 Complete Guide: Setting up Oracle Cloud & Connecting Your Server
 
-### 1. File Structure Guide
-- \`behavior_packs/\`: Drop your unpacked behavior packs here.
-- \`resource_packs/\`: Drop your unpacked resource packs here.
-- \`worlds/\`: World data files.
-- \`server.properties\`: Edit rules, view distances, and player limits here.
+### Step 1: Create Your Oracle Cloud Free Tier Instance
+1. Log into your **Oracle Cloud Console**.
+2. Go to **Compute** > **Instances** > click **Create Instance**.
+3. Name your instance and select **Ubuntu** (latest LTS) as the Image.
+4. Under **Shape**, click **Change Shape**, select **Ampere** (ARM), and configure up to 4 OCPUs and 24 GB RAM (Always Free tier limits).
+5. Under **Networking**, ensure **Assign a public IPv4 address** is checked.
+6. Under **Add SSH keys**, choose **Save private key** and download your `.pem` file to your device. Click **Create**.
 
 ---
 
-### 2. How to Connect it to Oracle Cloud (Step-by-Step)
+### Step 2: Open Port 19132 (Crucial for Players to Join)
+By default, Oracle blocks incoming traffic. You must open the Minecraft port:
+1. In your instance page, click your **Primary VNIC** / **Subnet** link.
+2. Click on the **Default Security List**.
+3. Click **Add Ingress Rules**:
+   - **Source CIDR:** \`0.0.0.0/0\`
+   - **IP Protocol:** \`UDP\`
+   - **Destination Port Range:** \`19132\`
+4. Click **Add Ingress Rule**.
 
-If you have an Oracle Cloud Free Tier instance running Ubuntu, follow these steps to link your server:
+---
 
-#### Step A: Initial Server Setup via SSH
-SSH into your Oracle VM:
+### Step 3: Find Your Public Oracle IP
+1. Go back to **Compute** > **Instances** and click your running server name.
+2. Look under **Primary VNIC** -> **Public IP address**. Copy this IP (e.g., \`152.xx.xx.xx\`). This is your Oracle Public IP!
+
+---
+
+### Step 4: Initial Server Setup via SSH
+Open your terminal (Termux or PC) and connect to your Oracle VM using your private key and public IP:
 \`\`\`bash
-ssh -i /path/to/key.pem ubuntu@YOUR_ORACLE_IP
+ssh -i /path/to/your-key.pem ubuntu@YOUR_ORACLE_IP
 \`\`\`
 
 Run these commands inside Oracle to install dependencies and clone this repo:
@@ -134,8 +148,10 @@ unzip bedrock.zip
 rm bedrock.zip
 \`\`\`
 
-#### Step B: Set up 24/7 Background Service (`systemd`)
-Create a background daemon so your server runs continuously:
+---
+
+### Step 5: Set up 24/7 Background Service (\`systemd\`)
+Create a background daemon so your server runs continuously even when you close SSH:
 \`\`\`bash
 sudo nano /etc/systemd/system/minecraft.service
 \`\`\`
@@ -154,23 +170,25 @@ Restart=always
 [Install]
 WantedBy=multi-user.target
 \`\`\`
-Save and exit, then start the service:
+Save and exit (Ctrl+O, Enter, Ctrl+X), then start the service:
 \`\`\`bash
 sudo systemctl daemon-reload
 sudo systemctl enable minecraft
 sudo systemctl start minecraft
 \`\`\`
 
-#### Step C: Enable Auto-Deploy (GitHub Secrets)
+---
+
+### Step 6: Enable Auto-Deploy (GitHub Secrets)
 To let GitHub auto-update your Oracle server whenever you push changes:
 1. Go to your repository on GitHub -> **Settings** -> **Secrets and variables** -> **Actions**.
-2. Add a new repository secret named **\`ORACLE_SSH_KEY\`** containing your entire Oracle private SSH key text (`.pem` file contents).
+2. Add a new repository secret named **\`ORACLE_SSH_KEY\`** containing the **entire text contents** of your Oracle private SSH key file (`.pem`).
 README_EOF
 
 # Initialize Git and push via GitHub CLI
 git init -b main
 git add .
-git commit -m "Initial commit: MCPE server template with TUI configuration and built-in guide"
+git commit -m "Add full step-by-step Oracle cloud setup instructions to generated server README"
 
 # Create the repo on GitHub using gh
 gh repo create "$REPO_NAME" $VISIBILITY --source=. --push --remote=origin
@@ -184,4 +202,4 @@ fi
 cd ~
 rm -rf "$TEMP_DIR"
 
-whiptail --title "Success!" --msgbox "Your repository '$REPO_NAME' has been successfully created with a clean UI template and built-in Oracle instructions!" 10 60
+whiptail --title "Success!" --msgbox "Your repository '$REPO_NAME' has been successfully created with the full Oracle setup guide inside its README!" 10 60
