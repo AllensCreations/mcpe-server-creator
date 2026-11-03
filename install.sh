@@ -1,64 +1,49 @@
 #!/bin/bash
 set -e
 
-echo "=================================================="
-echo "    MCPE Server Maker - Automatic Repo Setup      "
-echo "=================================================="
-echo ""
-
-# Check dependencies
-for cmd in git gh; do
-    if ! command -v $cmd &> /dev/null; then
-        echo "❌ Error: '$cmd' is required. Please install $cmd before running this script."
-        exit 1
-    fi
-done
-
-# Check GitHub authentication
-if ! gh auth status &> /dev/null; then
-    echo "❌ You are not logged into GitHub CLI."
-    echo "Please run 'gh auth login' first to authenticate."
-    exit 1
+# Ensure whiptail is available for the UI
+if ! command -v whiptail &> /dev/null; then
+    echo "Installing required UI package (whiptail)..."
+    pkg install -y whiptail || sudo apt-get install -y whiptail
 fi
 
-# Prompt for repository name
-read -p "Enter your new Server Repository Name (e.g., my-bedrock-server): " REPO_NAME < /dev/tty
+# --- STYLISH TUI MENUS ---
+whiptail --title "MCPE Server Maker" --msgbox "Welcome! This tool will create a fully configured, production-ready Minecraft Bedrock server repository on your GitHub, complete with Oracle Cloud deployment support." 10 60
+
+# 1. Get Repository Name
+REPO_NAME=$(whiptail --title "Repository Name" --inputbox "Enter your new Minecraft server repository name (e.g., my-bedrock-server):" 10 60 3>&1 1>&2 2>&3)
 if [ -z "$REPO_NAME" ]; then
-    echo "❌ Repository name cannot be empty."
+    whiptail --title "Cancelled" --msgbox "Repository name cannot be empty. Exiting." 8 40
     exit 1
 fi
 
-read -p "Make this repository Private? (y/n, default: y): " IS_PRIVATE < /dev/tty
-IS_PRIVATE=${IS_PRIVATE:-y}
-
-if [[ "$IS_PRIVATE" =~ ^[Yy]$ ]]; then
+# 2. Get Visibility Choice
+if (whiptail --title "Repository Privacy" --yesno "Do you want this server repository to be PRIVATE? (Recommended for safety)" 10 60); then
     VISIBILITY="--private"
+    VIS_TEXT="Private"
 else
     VISIBILITY="--public"
+    VIS_TEXT="Public"
 fi
 
-# Ask about Oracle SSH Deployment
-read -p "Do you want to configure Oracle Cloud Auto-Deployment via GitHub Actions now? (y/n, default: n): " SETUP_ORACLE < /dev/tty
-SETUP_ORACLE=${SETUP_ORACLE:-n}
-
-ORACLE_HOST=""
-ORACLE_USER="ubuntu"
-
-if [[ "$SETUP_ORACLE" =~ ^[Yy]$ ]]; then
-    read -p "Enter your Oracle VM Public IP Address: " ORACLE_HOST < /dev/tty
-    read -p "Enter your Oracle SSH Username (default: ubuntu): " INPUT_USER < /dev/tty
-    ORACLE_USER=${INPUT_USER:-ubuntu}
+# 3. Oracle Setup Choice
+if (whiptail --title "Oracle Cloud Integration" --yesno "Do you want to automatically set up Oracle Cloud Auto-Deployment via GitHub Actions?" 10 60); then
+    SETUP_ORACLE="y"
+    ORACLE_HOST=$(whiptail --title "Oracle Configuration" --inputbox "Enter your Oracle VM Public IP Address:" 10 60 3>&1 1>&2 2>&3)
+    ORACLE_USER=$(whiptail --title "Oracle Configuration" --inputbox "Enter your Oracle SSH Username (default: ubuntu):" 10 60 ubuntu 3>&1 1>&2 2>&3)
+    ORACLE_USER=${ORACLE_USER:-ubuntu}
+else
+    SETUP_ORACLE="n"
 fi
 
-# Create local temporary working directory
+# --- EXECUTION PHASE ---
 TEMP_DIR=$(mktemp -d)
 cd "$TEMP_DIR"
 
-echo "📂 Generating Bedrock Server template structure..."
 mkdir -p "$REPO_NAME"/behavior_packs "$REPO_NAME"/resource_packs "$REPO_NAME"/worlds
 cd "$REPO_NAME"
 
-# Create server.properties
+# Server configuration
 cat << 'CONFIG' > server.properties
 server-name=My MCPE Server
 gamemode=survival
@@ -75,12 +60,11 @@ player-idle-timeout=30
 max-threads=4
 CONFIG
 
-# Create pack configuration placeholders
 echo "[]" > worlds/world_behavior_packs.json
 echo "[]" > worlds/world_resource_packs.json
 
-# If Oracle setup is chosen, create GitHub Actions workflow directory and file
-if [[ "$SETUP_ORACLE" =~ ^[Yy]$ ]]; then
+# If Oracle was selected, build the GitHub Actions deploy pipeline
+if [ "$SETUP_ORACLE" = "y" ]; then
     mkdir -p .github/workflows
     cat << WORKFLOW > .github/workflows/deploy.yml
 name: Deploy to Oracle Cloud
@@ -107,41 +91,97 @@ jobs:
             git pull origin main
             sudo systemctl restart minecraft
 WORKFLOW
-    echo "⚙️ Added Oracle GitHub Actions deployment pipeline workflow."
 fi
 
-# Create README for the generated server repo
-cat << CONFIG > README.md
-# $REPO_NAME
+# --- BUILT-IN "HOW-TO" README FOR THE SERVER ---
+cat << README_EOF > README.md
+# $REPO_NAME 🎮
 
-Minecraft Bedrock Dedicated Server managed via GitHub and deployed to Oracle Cloud.
+Welcome to your automated Minecraft Bedrock Dedicated Server repository! 
 
-## Folder Structure
-- \`behavior_packs/\` - Place unpacked behavior packs here.
-- \`resource_packs/\` - Place unpacked resource packs here.
-- \`worlds/\` - World data and pack mapping JSON files.
-- \`server.properties\` - Server configurations.
-CONFIG
+---
 
-# Initialize Git and push using GitHub CLI
+## 📖 How to Connect & Manage Your Server
+
+### 1. File Structure Guide
+- \`behavior_packs/\`: Drop your unpacked behavior packs here.
+- \`resource_packs/\`: Drop your unpacked resource packs here.
+- \`worlds/\`: World data files.
+- \`server.properties\`: Edit rules, view distances, and player limits here.
+
+---
+
+### 2. How to Connect it to Oracle Cloud (Step-by-Step)
+
+If you have an Oracle Cloud Free Tier instance running Ubuntu, follow these steps to link your server:
+
+#### Step A: Initial Server Setup via SSH
+SSH into your Oracle VM:
+\`\`\`bash
+ssh -i /path/to/key.pem ubuntu@YOUR_ORACLE_IP
+\`\`\`
+
+Run these commands inside Oracle to install dependencies and clone this repo:
+\`\`\`bash
+sudo apt update && sudo apt install -y git curl unzip screen
+cd /home/ubuntu
+git clone https://github.com/\$(gh api user -q .login)/$REPO_NAME.git bedrock-server
+cd bedrock-server
+
+# Download official Bedrock server software
+wget https://minecraft.azureedge.net/bin-linux/bedrock-server-*.zip -O bedrock.zip
+unzip bedrock.zip
+rm bedrock.zip
+\`\`\`
+
+#### Step B: Set up 24/7 Background Service (`systemd`)
+Create a background daemon so your server runs continuously:
+\`\`\`bash
+sudo nano /etc/systemd/system/minecraft.service
+\`\`\`
+Paste this configuration:
+\`\`\`ini
+[Unit]
+Description=Minecraft Bedrock Server
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/bedrock-server
+ExecStart=/home/ubuntu/bedrock-server/bedrock_server
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+\`\`\`
+Save and exit, then start the service:
+\`\`\`bash
+sudo systemctl daemon-reload
+sudo systemctl enable minecraft
+sudo systemctl start minecraft
+\`\`\`
+
+#### Step C: Enable Auto-Deploy (GitHub Secrets)
+To let GitHub auto-update your Oracle server whenever you push changes:
+1. Go to your repository on GitHub -> **Settings** -> **Secrets and variables** -> **Actions**.
+2. Add a new repository secret named **\`ORACLE_SSH_KEY\`** containing your entire Oracle private SSH key text (`.pem` file contents).
+README_EOF
+
+# Initialize Git and push via GitHub CLI
 git init -b main
 git add .
-git commit -m "Initial commit: MCPE server template and deployment config"
+git commit -m "Initial commit: MCPE server template with TUI configuration and built-in guide"
 
-echo "🚀 Creating repository '$REPO_NAME' on your GitHub account..."
+# Create the repo on GitHub using gh
 gh repo create "$REPO_NAME" $VISIBILITY --source=. --push --remote=origin
 
-# If Oracle setup was chosen, automatically set secrets if values are present
-if [[ "$SETUP_ORACLE" =~ ^[Yy]$ ]] && [ -n "$ORACLE_HOST" ]; then
-    echo "🔒 Adding Oracle connection details to GitHub Repository Secrets..."
+# Automatically push secrets if Oracle config was provided
+if [ "$SETUP_ORACLE" = "y" ] && [ -n "$ORACLE_HOST" ]; then
     echo "$ORACLE_HOST" | gh secret set ORACLE_HOST --repo "$REPO_NAME"
     echo "$ORACLE_USER" | gh secret set ORACLE_USER --repo "$REPO_NAME"
-    echo "⚠️ Note: You will need to add your SSH Private Key to GitHub Secrets named 'ORACLE_SSH_KEY' for deployments to work."
 fi
 
-# Cleanup local temp files
 cd ~
 rm -rf "$TEMP_DIR"
 
-echo ""
-echo "✅ Success! Your new repository '$REPO_NAME' has been created on GitHub."
+whiptail --title "Success!" --msgbox "Your repository '$REPO_NAME' has been successfully created with a clean UI template and built-in Oracle instructions!" 10 60
