@@ -1,21 +1,16 @@
 # MCPE Server Creator
 
-An automated installer script to instantly create a version-controlled Minecraft Bedrock Server template repository on GitHub.
+An automated installer script to instantly create a version-controlled Minecraft Bedrock Server template repository on GitHub, ready for Oracle Cloud.
 
-## 🚀 One-Line Installation
+## 🚀 How to Run
 
-Run this command in Termux or any Bash terminal:
+Download and run the installer interactively in Termux:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/AllensCreations/mcpe-server-creator/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/AllensCreations/mcpe-server-creator/main/install.sh -o install.sh && bash install.sh && rm install.sh
 ```
 
-## 📋 Prerequisites
-- **Git** (`pkg install git` / `apt install git`)
-- **GitHub CLI** (`pkg install gh` / `apt install gh`) logged in via `gh auth login`
-
-## 📁 What it generates in your new repository
-- `behavior_packs/` directory
-- `resource_packs/` directory
-- `worlds/` directory with `world_behavior_packs.json` & `world_resource_packs.json`
-- Optimized `server.properties` ready for Oracle Cloud (50 Players, Hardcore settings)
+## ☁️ Oracle Cloud Integration
+When running the script, you can now choose to **automatically configure Oracle Cloud Auto-Deployment**. 
+- It will create a GitHub Actions workflow ().
+- Every time you push a resource pack or change settings on GitHub, it auto-syncs to your Oracle VM and restarts the server!

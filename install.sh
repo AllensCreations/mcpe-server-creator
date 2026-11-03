@@ -21,7 +21,7 @@ if ! gh auth status &> /dev/null; then
     exit 1
 fi
 
-# Read prompts explicitly from /dev/tty so curl piping works
+# Prompt for repository name
 read -p "Enter your new Server Repository Name (e.g., my-bedrock-server): " REPO_NAME < /dev/tty
 if [ -z "$REPO_NAME" ]; then
     echo "❌ Repository name cannot be empty."
@@ -35,6 +35,19 @@ if [[ "$IS_PRIVATE" =~ ^[Yy]$ ]]; then
     VISIBILITY="--private"
 else
     VISIBILITY="--public"
+fi
+
+# Ask about Oracle SSH Deployment
+read -p "Do you want to configure Oracle Cloud Auto-Deployment via GitHub Actions now? (y/n, default: n): " SETUP_ORACLE < /dev/tty
+SETUP_ORACLE=${SETUP_ORACLE:-n}
+
+ORACLE_HOST=""
+ORACLE_USER="ubuntu"
+
+if [[ "$SETUP_ORACLE" =~ ^[Yy]$ ]]; then
+    read -p "Enter your Oracle VM Public IP Address: " ORACLE_HOST < /dev/tty
+    read -p "Enter your Oracle SSH Username (default: ubuntu): " INPUT_USER < /dev/tty
+    ORACLE_USER=${INPUT_USER:-ubuntu}
 fi
 
 # Create local temporary working directory
@@ -66,11 +79,42 @@ CONFIG
 echo "[]" > worlds/world_behavior_packs.json
 echo "[]" > worlds/world_resource_packs.json
 
-# Create README for the server repo
+# If Oracle setup is chosen, create GitHub Actions workflow directory and file
+if [[ "$SETUP_ORACLE" =~ ^[Yy]$ ]]; then
+    mkdir -p .github/workflows
+    cat << WORKFLOW > .github/workflows/deploy.yml
+name: Deploy to Oracle Cloud
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Oracle VM via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: \${{ secrets.ORACLE_HOST }}
+          username: \${{ secrets.ORACLE_USER }}
+          key: \${{ secrets.ORACLE_SSH_KEY }}
+          script: |
+            cd /home/$ORACLE_USER/bedrock-server
+            git pull origin main
+            sudo systemctl restart minecraft
+WORKFLOW
+    echo "⚙️ Added Oracle GitHub Actions deployment pipeline workflow."
+fi
+
+# Create README for the generated server repo
 cat << CONFIG > README.md
 # $REPO_NAME
 
-Minecraft Bedrock Dedicated Server managed via GitHub.
+Minecraft Bedrock Dedicated Server managed via GitHub and deployed to Oracle Cloud.
 
 ## Folder Structure
 - \`behavior_packs/\` - Place unpacked behavior packs here.
@@ -82,10 +126,18 @@ CONFIG
 # Initialize Git and push using GitHub CLI
 git init -b main
 git add .
-git commit -m "Initial commit: MCPE server template files"
+git commit -m "Initial commit: MCPE server template and deployment config"
 
 echo "🚀 Creating repository '$REPO_NAME' on your GitHub account..."
 gh repo create "$REPO_NAME" $VISIBILITY --source=. --push --remote=origin
+
+# If Oracle setup was chosen, automatically set secrets if values are present
+if [[ "$SETUP_ORACLE" =~ ^[Yy]$ ]] && [ -n "$ORACLE_HOST" ]; then
+    echo "🔒 Adding Oracle connection details to GitHub Repository Secrets..."
+    echo "$ORACLE_HOST" | gh secret set ORACLE_HOST --repo "$REPO_NAME"
+    echo "$ORACLE_USER" | gh secret set ORACLE_USER --repo "$REPO_NAME"
+    echo "⚠️ Note: You will need to add your SSH Private Key to GitHub Secrets named 'ORACLE_SSH_KEY' for deployments to work."
+fi
 
 # Cleanup local temp files
 cd ~
